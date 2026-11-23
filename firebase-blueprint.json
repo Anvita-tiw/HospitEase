@@ -1,0 +1,243 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Authenticated HospitEase AI user profile synced via Google Sign-In.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name shown in the UI.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google account email address.",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "photoURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional profile photo URL.",
+          "maxLength": 512
+        },
+        "preferredCity": {
+          "type": "string",
+          "description": "Preferred Madhya Pradesh city filter.",
+          "maxLength": 60
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last profile update."
+        }
+      },
+      "required": ["uid", "displayName", "email", "createdAt", "updatedAt"]
+    },
+    "SavedHospital": {
+      "title": "Saved Hospital",
+      "description": "A hospital bookmarked by the user for quick OPD & bed tracking.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "hospitalId": {
+          "type": "number",
+          "description": "Numeric hospital ID in HospitEase AI."
+        },
+        "hospitalName": {
+          "type": "string",
+          "description": "Hospital display name.",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "city": {
+          "type": "string",
+          "description": "Hospital city.",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "hospitalType": {
+          "type": "string",
+          "description": "Hospital classification (Government, Private, Trust).",
+          "maxLength": 60
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional personal visit notes.",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when bookmarked."
+        }
+      },
+      "required": ["userId", "hospitalId", "hospitalName", "city", "createdAt"]
+    },
+    "ChatSession": {
+      "title": "AI Assistant Chat Session",
+      "description": "Multi-turn conversation metadata for the HospitEase Gemini assistant.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Short session title derived from the first user prompt.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["general", "reasoning", "fast", "search", "maps", "voice"],
+          "description": "Selected Gemini capability mode."
+        },
+        "model": {
+          "type": "string",
+          "description": "Gemini model identifier used for the session.",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "systemRole": {
+          "type": "string",
+          "description": "Selected chatbot persona role.",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "messageCount": {
+          "type": "number",
+          "description": "Total persisted messages in the session."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when session started."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest message."
+        }
+      },
+      "required": ["userId", "title", "mode", "model", "systemRole", "messageCount", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "AI Assistant Chat Message",
+      "description": "Individual user or assistant turn persisted inside a chat session.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "Parent chat session document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "model"],
+          "description": "Speaker role in the conversation."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message body.",
+          "minLength": 1,
+          "maxLength": 16000
+        },
+        "model": {
+          "type": "string",
+          "description": "Model used for assistant response.",
+          "maxLength": 64
+        },
+        "sources": {
+          "type": "array",
+          "description": "Up to 10 Search or Maps grounding source links."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the message was persisted."
+        }
+      },
+      "required": ["userId", "sessionId", "role", "text", "createdAt"]
+    },
+    "AdminMarker": {
+      "title": "Administrator Role Marker",
+      "description": "Trusted database-backed administrator registry keyed by Firebase UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile documents keyed by Firebase Auth UID."
+    },
+    "/users/{userId}/savedHospitals/{hospitalKey}": {
+      "schema": { "$ref": "#/entities/SavedHospital" },
+      "description": "User's bookmarked hospitals synced across devices."
+    },
+    "/users/{userId}/chatSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/ChatSession" },
+      "description": "User's multi-turn Gemini assistant sessions."
+    },
+    "/users/{userId}/chatSessions/{sessionId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages belonging to a user's Gemini chat session."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Database-backed admin authorization registry."
+    }
+  }
+}

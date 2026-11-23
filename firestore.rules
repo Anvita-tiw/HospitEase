@@ -1,0 +1,219 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'en23cs301177@medicaps.ac.in'
+      );
+    }
+
+    function isValidUserProfile(data) {
+      return data is map
+        && data.keys().hasAll(['uid', 'displayName', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'preferredCity', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 512))
+        && (!('preferredCity' in data) || (data.preferredCity is string && data.preferredCity.size() <= 60))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSavedHospital(data) {
+      return data is map
+        && data.keys().hasAll(['userId', 'hospitalId', 'hospitalName', 'city', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'hospitalId', 'hospitalName', 'city', 'hospitalType', 'notes', 'createdAt'])
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && data.hospitalId is number && data.hospitalId > 0
+        && data.hospitalName is string && data.hospitalName.size() >= 2 && data.hospitalName.size() <= 160
+        && data.city is string && data.city.size() >= 2 && data.city.size() <= 60
+        && (!('hospitalType' in data) || (data.hospitalType is string && data.hospitalType.size() <= 60))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidChatSession(data) {
+      return data is map
+        && data.keys().hasAll(['userId', 'title', 'mode', 'model', 'systemRole', 'messageCount', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'title', 'mode', 'model', 'systemRole', 'messageCount', 'createdAt', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.mode is string && data.mode in ['general', 'reasoning', 'fast', 'search', 'maps', 'voice']
+        && data.model is string && data.model.size() >= 3 && data.model.size() <= 64
+        && data.systemRole is string && data.systemRole.size() >= 2 && data.systemRole.size() <= 64
+        && data.messageCount is number && data.messageCount >= 0 && data.messageCount <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSourceEntry(entry) {
+      return entry is map
+        && entry.keys().hasAll(['title', 'uri', 'sourceType'])
+        && entry.keys().hasOnly(['title', 'uri', 'sourceType'])
+        && entry.title is string && entry.title.size() >= 1 && entry.title.size() <= 200
+        && entry.uri is string && entry.uri.size() >= 8 && entry.uri.size() <= 1024
+        && entry.sourceType is string && entry.sourceType in ['web', 'maps'];
+    }
+
+    function isValidChatMessage(data, sessionId) {
+      return data is map
+        && data.keys().hasAll(['userId', 'sessionId', 'role', 'text', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'sessionId', 'role', 'text', 'model', 'sources', 'createdAt'])
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidId(data.sessionId)
+        && data.sessionId == sessionId
+        && data.role is string && data.role in ['user', 'model']
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 16000
+        && (!('model' in data) || (data.model is string && data.model.size() <= 64))
+        && (!('sources' in data) || (
+          data.sources is list
+          && data.sources.size() <= 10
+          && (data.sources.size() == 0 || isValidSourceEntry(data.sources[0]))
+        ))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAdminDoc(data, targetUserId) {
+      return data is map
+        && data.keys().hasAll(['uid', 'email', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'createdAt'])
+        && isValidId(data.uid)
+        && data.uid == targetUserId
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.createdAt is timestamp;
+    }
+
+    // Trusted Admin Registry
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isAdmin()
+        && isValidAdminDoc(incoming(), userId)
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // PII-Isolated User Profiles
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isEmailVerified()
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isEmailVerified()
+        && isValidUserProfile(incoming())
+        && (isOwner(userId) || isAdmin())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'preferredCity', 'updatedAt']);
+      allow delete: if isValidId(userId) && isAdmin();
+
+      // Saved / Bookmarked Hospitals Subcollection (Master Gate checks parent /users/{userId})
+      match /savedHospitals/{hospitalKey} {
+        allow get: if isValidId(userId) && isValidId(hospitalKey) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && isEmailVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(hospitalKey)
+          && isEmailVerified()
+          && isOwner(userId)
+          && isValidSavedHospital(incoming())
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isValidId(userId)
+          && isValidId(hospitalKey)
+          && isEmailVerified()
+          && isValidSavedHospital(incoming())
+          && (isOwner(userId) || isAdmin())
+          && incoming().userId == existing().userId
+          && incoming().hospitalId == existing().hospitalId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['notes', 'hospitalName', 'city', 'hospitalType']);
+        allow delete: if isValidId(userId) && isValidId(hospitalKey) && ((isEmailVerified() && isOwner(userId)) || isAdmin());
+      }
+
+      // Gemini Assistant Chat Sessions Subcollection
+      match /chatSessions/{sessionId} {
+        allow get: if isValidId(userId) && isValidId(sessionId) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && isEmailVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(sessionId)
+          && isEmailVerified()
+          && isOwner(userId)
+          && isValidChatSession(incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isValidId(userId)
+          && isValidId(sessionId)
+          && isEmailVerified()
+          && isValidChatSession(incoming())
+          && (isOwner(userId) || isAdmin())
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'mode', 'model', 'systemRole', 'messageCount', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(sessionId) && ((isEmailVerified() && isOwner(userId)) || isAdmin());
+
+        // Messages inside a Chat Session (Master Gate + Atomicity Guarantee via getAfter)
+        match /messages/{messageId} {
+          allow get: if isValidId(userId) && isValidId(sessionId) && isValidId(messageId) && (isOwner(userId) || isAdmin());
+          allow list: if isSignedIn() && isEmailVerified() && resource.data.userId == request.auth.uid;
+          allow create: if isValidId(userId)
+            && isValidId(sessionId)
+            && isValidId(messageId)
+            && isEmailVerified()
+            && isOwner(userId)
+            && isValidChatMessage(incoming(), sessionId)
+            && incoming().createdAt == request.time
+            && get(/databases/$(database)/documents/users/$(userId)/chatSessions/$(sessionId)).data.userId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/users/$(userId)/chatSessions/$(sessionId)).data.updatedAt == request.time;
+          allow update: if false;
+          allow delete: if isValidId(userId) && isValidId(sessionId) && isValidId(messageId) && ((isEmailVerified() && isOwner(userId)) || isAdmin());
+        }
+      }
+    }
+  }
+}

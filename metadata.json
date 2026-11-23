@@ -1,0 +1,6 @@
+{
+  "name": "HospitEase AI",
+  "description": "Intelligent crowdsourced platform for hospital OPD queue status, waiting-time range estimation, and ward-wise bed availability prediction.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
